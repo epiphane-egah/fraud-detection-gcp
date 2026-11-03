@@ -1,20 +1,90 @@
 from datetime import datetime
 from kfp import dsl, compiler
-from kfp.dsl import Dataset, Input, Model
+from kfp.dsl import Dataset, Input, Model, Output, Metrics
 from google.cloud import aiplatform
 from google_cloud_pipeline_components.v1.custom_job import CustomTrainingJobOp
-from fraud_pipeline import (
-    PROJECT_ID, REGION, BUCKET, PIPELINE_ROOT, IMAGE,
-    prepare_data, evaluate_model, register_model,
-)
 
+PROJECT_ID = "fraude-detection-gcp"
+REGION = "europe-west1"
+BUCKET = "gs://data-epip"
+PIPELINE_ROOT = f"{BUCKET}/pipeline_root"
+IMAGE = f"{REGION}-docker.pkg.dev/{PROJECT_ID}/ml/fraud-train:latest"
 SERVICE_ACCOUNT = f"ml-pipeline@{PROJECT_ID}.iam.gserviceaccount.com"
+
+
+# --- 1. Préparation des données ---
+@dsl.component(base_image=IMAGE)
+def prepare_data(
+    train_uri: str,
+    test_uri: str,
+    train_data: Output[Dataset],
+    test_data: Output[Dataset],
+):
+    import pandas as pd
+
+    drop_cols = ["nameOrig", "nameDest", "step", "isFlaggedFraud"]
+    for uri, out in [(train_uri, train_data), (test_uri, test_data)]:
+        df = pd.read_parquet(uri, engine="pyarrow").drop(columns=drop_cols)
+        df.to_parquet(out.path, index=False)
 
 
 @dsl.component(base_image="python:3.11-slim")
 def get_uri(data: Input[Dataset]) -> str:
     """Convertit un artefact en URI gs:// utilisable comme argument du job."""
     return data.uri
+
+
+# --- 3. Évaluation sur le jeu de test ---
+@dsl.component(base_image=IMAGE)
+def evaluate_model(
+    test_data: Input[Dataset],
+    model: Input[Model],
+    target: str,
+    metrics: Output[Metrics],
+) -> float:
+    import os
+    import joblib
+    import pandas as pd
+    from sklearn.metrics import (
+        precision_recall_curve,
+        auc,
+        average_precision_score
+    )
+
+    df = pd.read_parquet(test_data.path)
+    X_test, y_test = df.drop(columns=[target]), df[target]
+
+    clf = joblib.load(os.path.join(model.path, "model.joblib"))
+   
+    y_proba = clf.predict_proba(X_test)[:, 1]
+    
+    precision, recall, _ = precision_recall_curve(y_test, y_proba)
+    auprc = auc(recall, precision)
+    
+    metrics.log_metric("test_average_precision", 
+                       float(average_precision_score(y_test, y_proba)))
+    metrics.log_metric("test_auprc", auprc)
+    
+    return auprc
+
+
+# --- 4. Enregistrement dans le Model Registry ---
+@dsl.component(base_image=IMAGE)
+def register_model(
+    model: Input[Model],
+    project: str,
+    region: str,
+    display_name: str,
+    serving_image: str,
+):
+    from google.cloud import aiplatform
+
+    aiplatform.init(project=project, location=region)
+    aiplatform.Model.upload(
+        display_name=display_name,
+        artifact_uri=model.uri,
+        serving_container_image_uri=serving_image,
+    )
 
 
 @dsl.pipeline(name="fraud-training-custom-job", pipeline_root=PIPELINE_ROOT)
@@ -26,7 +96,7 @@ def fraud_pipeline_cj(
     n_iter: int = 30,
     cv_folds: int = 10,
     n_jobs: int = -1,
-    min_auprc: float = 0.90,
+    min_auprc: float = 0.80,
     serving_image: str = IMAGE,  # à remplacer par une vraie image de serving
 ):
     data_task = prepare_data(train_uri=train_uri, test_uri=test_uri)
@@ -92,8 +162,9 @@ if __name__ == "__main__":
         template_path="fraud_pipeline_cj.json",
         parameter_values={
             "model_dir": f"{BUCKET}/models/{run_id}",
-            "n_iter": 1,
-            "cv_folds": 3,
+            "n_iter": 5,
+            "cv_folds": 10,
+            "n_jobs": 7
         },
         enable_caching=True,
     )

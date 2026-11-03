@@ -21,20 +21,61 @@ def parse_args():
     p.add_argument("--train-data", required=True)  # gs://.../train_data
     p.add_argument("--model-dir", required=True)   # gs://bucket/models/<run>
     p.add_argument("--target", default="isFraud")
-    p.add_argument("--n-iter", type=int, default=30)
-    p.add_argument("--cv-folds", type=int, default=10)
-    p.add_argument("--n-jobs", type=int, default=8)
+    p.add_argument("--n-iter", type=int, default=1)
+    p.add_argument("--cv-folds", type=int, default=3)
+    p.add_argument("--n-jobs", type=int, default=3)
     return p.parse_args()
 
 
 def main():
     args = parse_args()
 
-    df = pd.read_parquet(args.train_data, engine="pyarrow")  # gcsfs gère gs://
-    X_train, y_train = df.drop(columns=[args.target]), df[args.target]
+    df = pd.read_parquet(args.train_data, engine="pyarrow") # gcsfs gère gs://
+
+    print(f"Dataset shape: {df.shape}")
+    print(f"Columns: {df.columns.tolist()}")
+
+    if args.target not in df.columns:
+        raise ValueError(
+            f"Target column '{args.target}' not found. "
+            f"Available columns: {df.columns.tolist()}"
+        )
+
+    if df.empty:
+        raise ValueError("Training dataset is empty.")
+
+    X_train = df.drop(columns=[args.target])
+    X_train.drop(
+        ["nameOrig", "nameDest", "step", "isFlaggedFraud"], 
+        axis=1, 
+        inplace=True, 
+        errors='ignore')
+    y_train = df[args.target]
+
+    print(f"Target distribution:\n{y_train.value_counts(dropna=False)}")
+
+    if y_train.isna().any():
+        raise ValueError("Target contains missing values.")
+
+    if y_train.nunique() != 2:
+        raise ValueError(
+            f"Expected a binary target; found {y_train.nunique()} classes."
+        )
+
+    if y_train.value_counts().min() < args.cv_folds:
+        raise ValueError(
+            "Not enough samples in the minority class for the "
+            f"requested {args.cv_folds}-fold cross-validation."
+        )
 
     num_cols = X_train.select_dtypes(include="number").columns.tolist()
     cat_cols = X_train.select_dtypes(exclude="number").columns.tolist()
+
+    X_train.drop(
+        ["nameOrig", "nameDest", "step", "isFlaggedFraud"], 
+        axis=1, 
+        inplace=True, 
+        errors='ignore')
 
     preprocess = ColumnTransformer(
         transformers=[
@@ -42,7 +83,7 @@ def main():
                 "num",
                 Pipeline(
                     [
-                        ("skew_data", FunctionTransformer(utils.skew_data)),
+                        ("skew_data", FunctionTransformer(utils.skew_data_tr)),
                         ("scaler", MinMaxScaler()),
                     ]
                 ),
@@ -62,7 +103,7 @@ def main():
 
     pipeline_xgb = ImbPipeline(
         steps=[
-            ("clean_data", FunctionTransformer(utils.preprocess)),
+            ("clean_data", FunctionTransformer(utils.preprocess_tr)),
             ("preprocess", preprocess),
             ("smote", SMOTE(random_state=42)),
             ("classifier", classifier),
