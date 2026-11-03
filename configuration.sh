@@ -37,7 +37,8 @@ gcloud artifacts repositories describe ml --location='europe-west1' 1>/dev/null 
 
 gcloud builds submit \
   --tag europe-west1-docker.pkg.dev/$PROJECT_ID/ml/fraud-train:latest .
-
+# gcloud builds submit \
+#   --tag europe-west1-docker.pkg.dev/fraude-detection-gcp/ml/fraud-train:latest .
 
 # 1. Création du compte de service
 gcloud iam service-accounts describe "$PIPELINE_NAME" 1>/dev/null 2>&1 || \

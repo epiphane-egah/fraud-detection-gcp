@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import scipy
 from sklearn.metrics import roc_curve, auc
-import miceforest as mf
 
 
 def pearson_skewness(data:pd.Series):
@@ -66,9 +65,22 @@ def plot_categorical(df):
     plt.show()
 
 
-def skew_data(X_pdf):
-    for col in X_pdf.select_dtypes(include=["int", "float"]).columns.tolist():
-        X_pdf[col] = scipy.stats.boxcox(X_pdf[col]+1)[0]
+def skew_data_tr(X):
+    X_pdf = X.copy()
+
+    for col in X_pdf.columns:
+        x = X_pdf[col].astype(float)
+
+        # Box-Cox n'accepte ni NaN ni inf
+        if not np.all(np.isfinite(x)):
+            raise ValueError(f"{col}: contains NaN or infinite values")
+
+        # Décalage garantissant x > 0
+        shift = max(0, 1 - x.min())
+        x_positive = x + shift
+
+        X_pdf[col] = scipy.stats.boxcox(x_positive)[0]
+
     return X_pdf
 
 
@@ -178,8 +190,8 @@ def plot_roc_curve(y_test, y_scores):
     fig.show(renderer="browser")
 
 
-def preprocess(train_pdf: pd.DataFrame) -> pd.DataFrame:
-    
+def preprocess_tr(train: pd.DataFrame) -> pd.DataFrame:
+    train_pdf = train.copy()
     # type casting
     train_pdf["type"] = train_pdf["type"].astype("category")
 
@@ -188,18 +200,36 @@ def preprocess(train_pdf: pd.DataFrame) -> pd.DataFrame:
      exclude=["category", "object", "str"]).columns.tolist():
         train_pdf.loc[borne_inf_sup(train_pdf[col])==True, col] = np.nan
 
-    # traitement des valeurs manquantes
-    original_index = train_pdf.index
+    # # traitement des valeurs manquantes
+    # original_index = train_pdf.index
+    # columns = train_pdf.columns.to_list()
 
-    train_pdf = train_pdf.reset_index(drop=True)
-    kernel = mf.ImputationKernel(
-        train_pdf, num_datasets=1, save_all_iterations_data=True, random_state=42
-    )
+    # train_pdf = train_pdf.reset_index(drop=True)
+    # kernel = mf.ImputationKernel(
+    #     train_pdf, num_datasets=1, save_all_iterations_data=True, random_state=42
+    # )
 
-    kernel.mice(iterations=3)
+    # kernel.mice(iterations=3)
 
-    train_pdf = kernel.complete_data(dataset=0)
+    # train_pdf = kernel.complete_data(dataset=0)
+    
 
-    train_pdf.index = original_index
+    # train_pdf.index = original_index
+    # train_pdf.columns = columns
+
+    num_cols = train_pdf.select_dtypes(
+        exclude=["category", "object", "str"]
+    ).columns
+
+    cat_cols = train_pdf.select_dtypes(
+        include=["category", "object", "str"]
+    ).columns
+
+    for col in num_cols:
+        train_pdf[col] = train_pdf[col].replace([np.inf, -np.inf], np.nan)
+        train_pdf[col] = train_pdf[col].fillna(train_pdf[col].median())
+
+    for col in cat_cols:
+        train_pdf[col] = train_pdf[col].fillna(train_pdf[col].mode().iloc[0])
 
     return train_pdf
