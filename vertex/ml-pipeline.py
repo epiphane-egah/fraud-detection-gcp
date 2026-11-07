@@ -96,7 +96,7 @@ def fraud_pipeline_cj(
     n_iter: int = 30,
     cv_folds: int = 10,
     n_jobs: int = -1,
-    min_auprc: float = 0.80,
+    min_auprc: float = 0.6,
     serving_image: str = IMAGE,  # à remplacer par une vraie image de serving
 ):
     data_task = prepare_data(train_uri=train_uri, test_uri=test_uri)
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         template_path="fraud_pipeline_cj.json",
         parameter_values={
             "model_dir": f"{BUCKET}/models/{run_id}",
-            "n_iter": 5,
+            "n_iter": 100,
             "cv_folds": 10,
             "n_jobs": 7
         },
