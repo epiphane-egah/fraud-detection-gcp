@@ -15,9 +15,10 @@ X_test, y_test = test_pdf.drop("isFraud", axis=1), test_pdf["isFraud"]
 X_test.drop(["nameOrig", "nameDest", "step", "isFlaggedFraud"], axis=1, inplace=True)
 
 model = joblib.load("model.joblib")
-probas =  model.predict_proba(X_test)[:, 1]
+probas = model.predict_proba(X_test)[:, 1]
 
 precision, recall, threshold = precision_recall_curve(y_test, probas)
-print(f"precision : {np.mean(precision)}")
+print(f"precision (TP/(TP+FP)) : {np.mean(precision)}")
+print(f"recall (TP/(TP+FN)): {np.mean(recall)}")
 print(f"auprc : {auc(recall, precision)}")
 print(f"average_precision : {average_precision_score(y_test, probas)}")

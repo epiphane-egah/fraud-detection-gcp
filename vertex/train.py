@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-
 import joblib
 import pandas as pd
 from imblearn.over_sampling import SMOTE
@@ -10,16 +9,18 @@ from scipy.stats import loguniform, randint, uniform
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, OneHotEncoder
+from sklearn.preprocessing import (
+    FunctionTransformer,
+    MinMaxScaler,
+    OneHotEncoder)
 from xgboost import XGBClassifier
-
 import utils
 
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--train-data", required=True)  # gs://.../train_data
-    p.add_argument("--model-dir", required=True)   # gs://bucket/models/<run>
+    p.add_argument("--train-data", required=True)
+    p.add_argument("--model-dir", required=True)
     p.add_argument("--target", default="isFraud")
     p.add_argument("--n-iter", type=int, default=1)
     p.add_argument("--cv-folds", type=int, default=3)

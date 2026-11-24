@@ -89,7 +89,7 @@ def register_model(
 
 @dsl.pipeline(name="fraud-training-custom-job", pipeline_root=PIPELINE_ROOT)
 def fraud_pipeline_cj(
-    model_dir: str,  # ex. gs://data-epip/models/20261004-1530 (un dossier par run)
+    model_dir: str,
     train_uri: str = f"{BUCKET}/train/paysim.parquet",
     test_uri: str = f"{BUCKET}/test/paysim.parquet",
     target: str = "isFraud",
@@ -97,7 +97,7 @@ def fraud_pipeline_cj(
     cv_folds: int = 10,
     n_jobs: int = -1,
     min_auprc: float = 0.6,
-    serving_image: str = IMAGE,  # à remplacer par une vraie image de serving
+    serving_image: str = IMAGE,
 ):
     data_task = prepare_data(train_uri=train_uri, test_uri=test_uri)
     train_uri_task = get_uri(data=data_task.outputs["train_data"])
@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
     aiplatform.init(project=PROJECT_ID, location=REGION, staging_bucket=BUCKET)
 
-    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_id = datetime.now().strftime("%Y-%m-%d")
     job = aiplatform.PipelineJob(
         display_name="fraud-training-cj-run",
         template_path="fraud_pipeline_cj.json",

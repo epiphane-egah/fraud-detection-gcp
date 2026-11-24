@@ -1,131 +1,87 @@
-# Projet de détection de fraude — Étapes GCP
+# Projet de détection de fraude — GCP
 
 ## 0. Préparation de l'environnement GCP
 
-* Création d'un projet GCP (`gcloud projects create`) et activation de la facturation
-* Activation des API nécessaires :
-  ```bash
-  gcloud services enable storage.googleapis.com \
-    aiplatform.googleapis.com \
-    cloudfunctions.googleapis.com \
-    cloudscheduler.googleapis.com \
-    bigquery.googleapis.com \
-    run.googleapis.com
-  ```
-* Création à la main **et** via un client Python (`google-cloud-storage`) d'un bucket **Cloud Storage**
-* Organisation du bucket (structure équivalente à S3) :
-  ```
-  gs://mon-bucket-fraude/
-  ├── data/
-  ├── train/
-  ├── validation/
-  ├── test/
-  └── output/
-  ```
-* Configuration de base : authentification (`gcloud auth application-default login`), compte de service dédié, rôles IAM (`Storage Admin`, `Vertex AI User`, etc.)
+- Création et configuration d'un projet Google Cloud Platform (GCP).
+- Activation des API nécessaires, notamment Vertex AI et Cloud Storage.
+- Création d'un bucket Google Cloud Storage (GCS) pour stocker les données, les modèles et les prédictions.
+- Configuration de l'authentification et des permissions IAM.
 
-**Infra GCP :** Cloud Storage (GCS), IAM
+**Infrastructure GCP :** Cloud Storage, IAM.
 
----
 
-## 1. Exploration, nettoyage et feature engineering
 
-* Lancement d'une instance de notebook via **Vertex AI Workbench**
-* Exploration / analyse des données (Data analysis)
-* Nettoyage des données (Data cleaning)
-* Feature engineering (création de variables pertinentes pour la fraude)
+## 1. Exploration et prétraitement des données
 
-**Infra GCP :** Vertex AI Workbench (Notebook instance)
+- Exploration et analyse des données.
+- Détection et traitement des valeurs aberrantes (outliers).
+- Imputation des valeurs manquantes avec MICE.
+- Analyse et traitement de l'asymétrie des données.
+- Suréchantillonnage de la classe minoritaire avec SMOTE.
 
----
 
-## 2. Préparation des données pour l'entraînement
 
-* Split du dataset : 70 % train / 15 % validation / 15 % test
-* Sauvegarde des 3 sous-ensembles dans Cloud Storage (`train/`, `validation/`, `test/`)
+## 2. Préparation des données
 
-**Infra GCP :** Cloud Storage
+- Division du dataset en deux ensembles :
+  - 80 % pour l'entraînement.
+  - 20 % pour le test.
+- Préparation des données pour l'entraînement du modèle.
 
----
+**Infrastructure GCP :** Cloud Storage.
 
-## 3. Entraînement du modèle
 
-1. Choix de l'algorithme **XGBoost**
-2. Configuration des hyperparamètres
-3. Lancement d'un **Hyperparameter Tuning Job** (Vertex AI) + entraînement
-4. Sauvegarde du modèle entraîné dans Cloud Storage (`output/`)
 
-**Infra GCP :** Vertex AI Training (Custom Jobs), Vertex AI Hyperparameter Tuning, Cloud Storage
+## 3. Entraînement et évaluation du modèle
 
----
+- Développement d'un modèle de classification binaire basé sur XGBoost.
+- Recherche d'hyperparamètres avec Randomized Search.
+- Évaluation des performances du modèle et analyse du surapprentissage (overfitting).
+- Utilisation de métriques adaptées aux données déséquilibrées :
+  - Average Precision.
+  - AUPRC (Area Under the Precision-Recall Curve).
 
-## 4. Déploiement en production
+**Infrastructure GCP :** Vertex AI, Kubeflow.
 
-* Import du modèle entraîné dans le **Vertex AI Model Registry**
-* Création d'un **endpoint Vertex AI** à partir du modèle
-* Exposition du modèle sous forme de REST API pour l'inférence en temps réel (directement via l'endpoint Vertex AI, ou via **API Gateway** GCP en façade)
 
-**Infra GCP :** Vertex AI Endpoints, API Gateway (GCP)
 
----
+## 4. Orchestration du pipeline ML
 
-## 5. Génération de transactions fictives (simulation)
+- Mise en place d'un pipeline de machine learning avec Kubeflow.
+- Orchestration des différentes étapes du workflow.
+- Exécution du pipeline sur Vertex AI à l'aide de l'API AI Platform.
 
-* **Cloud Scheduler** déclenche un événement toutes les minutes
-* **Cloud Functions** (ou Cloud Run) génère une transaction fictive et l'envoie au endpoint Vertex AI (REST API) pour obtenir une prédiction de fraude
-* Sauvegarde des inférences (résultats de prédiction) dans Cloud Storage
-* Récupération des données générées pour un ré-entraînement futur si besoin
+**Infrastructure GCP :** Vertex AI, Kubeflow.
 
-**Infra GCP :** Cloud Scheduler, Cloud Functions (ou Cloud Run), Cloud Storage
 
----
 
-## 6. Exposition des données
+## 5. Enregistrement et déploiement du modèle
 
-* Les données (format Parquet) stockées dans Cloud Storage sont requêtées via **BigQuery** (tables externes pointant vers GCS, ou chargement dans BigQuery)
+- Enregistrement du modèle entraîné dans le Vertex AI Model Registry.
+- Déploiement du modèle sur un endpoint Vertex AI.
+- Exposition d'un endpoint permettant d'envoyer des données et de récupérer des prédictions en production.
 
-**Infra GCP :** BigQuery
+**Infrastructure GCP :** Vertex AI Model Registry, Vertex AI Endpoints.
 
----
 
-## 7. Reporting / Dashboard
 
-* Connexion de **Looker Studio** à BigQuery pour créer des dashboards de visualisation
-* Analyse des décisions prises par le modèle (taux de fraude détecté, faux positifs, tendances, etc.)
+## 6. Stockage des données et des prédictions
 
-**Infra GCP :** Looker Studio
+- Stockage des données utilisées par le système dans Google Cloud Storage.
+- Sauvegarde des prédictions générées en production dans un bucket GCS.
 
----
+**Infrastructure GCP :** Cloud Storage.
 
-## Table de correspondance AWS → GCP
 
-| Service AWS                         | Équivalent GCP                              |
-|--------------------------------------|----------------------------------------------|
-| S3                                    | Cloud Storage (GCS)                          |
-| SageMaker Notebook Instance           | Vertex AI Workbench                          |
-| SageMaker Training Jobs               | Vertex AI Training (Custom Jobs)             |
-| SageMaker Hyperparameter Tuning       | Vertex AI Hyperparameter Tuning              |
-| SageMaker Endpoint                    | Vertex AI Endpoints                          |
-| API Gateway (AWS)                     | API Gateway (GCP)                            |
-| CloudWatch Events / EventBridge       | Cloud Scheduler                              |
-| Lambda                                | Cloud Functions / Cloud Run                  |
-| Athena                                | BigQuery                                     |
-| QuickSight                            | Looker Studio                                |
 
----
+## 7. Monitoring et dashboard
 
-## Pipeline global
+- Développement d'un dashboard avec Dash.
+- Hébergement du dashboard sur Google Cloud.
+- Suivi de l'état de santé du système de détection de fraude et des prédictions réalisées en production.
 
-```mermaid
-flowchart LR
-    A[Cloud Storage - data brute] --> B[Vertex AI Workbench - exploration/cleaning/FE]
-    B --> C[Cloud Storage - train/val/test]
-    C --> D[Vertex AI Training + HP Tuning - XGBoost]
-    D --> E[Cloud Storage - output modèle]
-    E --> F[Vertex AI Endpoint - déploiement REST]
-    G[Cloud Scheduler] --> H[Cloud Functions - transaction fictive]
-    H --> F
-    F --> I[Cloud Storage - inférences]
-    I --> J[BigQuery - requêtage]
-    J --> K[Looker Studio - dashboard]
-```
+
+
+**Technologies :** Dash, Google Cloud.
+
+
