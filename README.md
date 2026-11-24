@@ -80,7 +80,7 @@
 - Hébergement du dashboard sur Google Cloud.
 - Suivi de l'état de santé du système de détection de fraude et des prédictions réalisées en production.
 
-
+![Dash](detection.png)
 
 **Technologies :** Dash, Google Cloud.
 
