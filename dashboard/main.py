@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
 
+PRECISION1 = 0.016291193579710775
 CSV_PATH = "transactions.csv"
 REFRESH_SECONDS = 30          # relecture automatique du fichier
 COLORS = {0: "#4B2EE8", 1: "#DF8355"}
@@ -135,7 +136,7 @@ app.layout = html.Div(
         # Ligne de KPI
         html.Div([
             kpi("Montant économisé (fraudes bloquées)", "k_saved", COLORS[1]),
-            kpi("Montant total traité", "k_total"),
+            kpi("Montant économisé / Montant total de fraude (%)", "k_total"),
             kpi("Nb transactions", "k_n"),
             kpi("Taux de fraude détectée", "k_rate"),
             kpi("Dernier lot", "k_last"),
@@ -149,7 +150,7 @@ app.layout = html.Div(
         html.Div([
             card("Montant moyen d'une transaction", "par type de transaction et étiquettes",
                  "g_moyen"),
-            card("Distribution des transactions frauduleuses", "par étiquettes", "g_donut"),
+            card("Distribution des transactions", "par étiquettes", "g_donut"),
         ], style={"display": "flex", "gap": "12px", "marginBottom": "12px"}),
 
         # Santé du modèle
@@ -170,10 +171,10 @@ app.layout = html.Div(
 )
 def refresh(_):
     df = load_data()
-    saved = df.loc[df["predictions"] == 1, "amount"].sum()
+    saved = df.loc[df["predictions"] == 1, "amount"].sum()*PRECISION1
     return (
         fig_total_par_lot(df), fig_moyen_par_type(df), fig_donut(df), fig_taux_fraude(df),
-        fmt(saved), fmt(df["amount"].sum()), f"{len(df):,}".replace(",", " "),
+        fmt(saved), f"{((saved)/(0.001*len(df)*1_456_248)) * 100:.2f} %", f"{len(df):,}".replace(",", " "),
         f"{df['predictions'].mean() * 100:.2f} %",
         df["lot"].max().strftime("%d/%m %H:%M:%S"),
     )
